@@ -24,12 +24,12 @@ namespace DIDT
 
         public static string patchListUrl;
         public static string patchListFileName;
-        public static string downloadUUID;
         public static PatchList patchList;
 
         public static string indexURL;
         public static string indexFileName;
         public static string indexFilePath;
+        public static Dictionary<string, string> downloadUUIDs;
         public static Dictionary<string, Index> indices;
 
         public enum OSType { IOS = 0, Android = 1 };
@@ -67,6 +67,7 @@ namespace DIDT
             gameVersionString = Program.window.GetGameVersionString();
             patchListFileName = Path.GetFileNameWithoutExtension(patchListUrl);
             indices = new Dictionary<string, Index>();
+            downloadUUIDs = new Dictionary<string, string>();
 
             Thread thread = new Thread(() =>
             {
@@ -102,10 +103,10 @@ namespace DIDT
                                 string type = item.Key;
                                 string uuid = item.Value;
 
-                                downloadUUID = uuid;
-                                Debug.Log("Found UUID : " + type + " " + downloadUUID);
+                                downloadUUIDs.Add(type, uuid);
+                                Debug.Log("Found UUID : " + type + " " + uuid);
 
-                                indexURL = @"https://g67ena.gph.easebar.com/" + downloadUUID + "/" + osTypeString.ToLower() + "_" + medium + "_" + "index";
+                                indexURL = @"https://g67ena.gph.easebar.com/" + uuid + "/" + osTypeString.ToLower() + "_" + medium + "_" + "index";
                                 DownloadIndex(type);
                             }
                         }
@@ -124,7 +125,7 @@ namespace DIDT
 
         static void DownloadIndex(string uuidType)
         {
-            Debug.Log("Downloading Index : " + indexURL);
+            Debug.Log("Downloading Index : " + uuidType + " " + indexURL);
             indexFileName = Path.GetFileNameWithoutExtension(indexURL);
             indexFilePath = cacheDir + indexFileName + "_" + uuidType;
             try
@@ -184,6 +185,7 @@ namespace DIDT
                 float fileCounter = 0;
                 foreach (KeyValuePair<string, Index> index in indices)
                 {
+
                     for (int b = 0; b < index.Value.blockCount; b++)
                     {
                         Index.Block block = index.Value.blocks[b];
@@ -195,7 +197,7 @@ namespace DIDT
                         {
                             for (int f = 0; f < block.fileCount; f++)
                             {
-                                string fileURL = gphDomainURL + downloadUUID + "/" + osTypeString.ToLower() + "_" + medium + "_" + blockID + "." + f;
+                                string fileURL = gphDomainURL + downloadUUIDs[index.Key] + "/" + osTypeString.ToLower() + "_" + medium + "_" + blockID + "." + f;
                                 string fileName = Path.GetFileName(fileURL);
 
                                 Debug.Log("Downloading | " + fileURL);
