@@ -16,15 +16,5 @@ namespace DIDT
             Program.window.AppendLogText(text);
             logLine++;
         }
-
-        public static void BeginUpdate()
-        {
-            Program.window.BeginLogUpdate();
-        }
-
-        public static void EndUpdate()
-        {
-            Program.window.EndLogUpdate();
-        }
     }
 }

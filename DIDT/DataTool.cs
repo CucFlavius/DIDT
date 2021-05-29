@@ -31,6 +31,9 @@ namespace DIDT
         public static string indexFilePath;
         public static Dictionary<string, string> downloadUUIDs;
         public static Dictionary<string, Index> indices;
+        public static bool running;
+        static bool endSession = false;
+        static Thread workerThread;
 
         public enum OSType { IOS = 0, Android = 1 };
 
@@ -60,6 +63,12 @@ namespace DIDT
             DownloadPatchList();
         }
 
+        public static void EndSession()
+        {
+            endSession = true;
+            Debug.Log("Ending Session ...");
+        }
+
         static void DownloadPatchList()
         {
             patchListUrl = Program.window.GetPatchListPath();
@@ -69,7 +78,7 @@ namespace DIDT
             indices = new Dictionary<string, Index>();
             downloadUUIDs = new Dictionary<string, string>();
 
-            Thread thread = new Thread(() =>
+            workerThread = new Thread(() =>
             {
                 if (!Directory.Exists(cacheDir))
                     Directory.CreateDirectory(cacheDir);
@@ -91,7 +100,7 @@ namespace DIDT
                         };
                     }
 
-                    using (Stream str = File.OpenRead(cacheDir + patchListFileName))
+                    using (Stream str = System.IO.File.OpenRead(cacheDir + patchListFileName))
                     {
                         using (StreamReader reader = new StreamReader(str))
                         {
@@ -100,6 +109,9 @@ namespace DIDT
 
                             foreach (KeyValuePair<string, string> item in patchList.patch_timestamp)
                             {
+                                if (endSession)
+                                    return;
+
                                 string type = item.Key;
                                 string uuid = item.Value;
 
@@ -112,15 +124,24 @@ namespace DIDT
                         }
                     }
 
+                    if (endSession)
+                        return;
+
                     DownloadRepository();
                 }
                 catch (Exception e)
                 {
                     Debug.Log(e.Message);
                 }
+
+                if (endSession)
+                {
+                    Debug.Log("Ended.");
+                    endSession = false;
+                }
             });
 
-            thread.Start();
+            workerThread.Start();
         }
 
         static void DownloadIndex(string uuidType)
@@ -145,7 +166,7 @@ namespace DIDT
                     };
                 }
 
-                using (Stream str = File.OpenRead(indexFilePath))
+                using (Stream str = System.IO.File.OpenRead(indexFilePath))
                 {
                     if (str.Length > 0)
                     {
@@ -193,10 +214,13 @@ namespace DIDT
 
                         // Download each file and merge into a buffer file //
                         string bufferFilePath = cacheDir + @"Block" + blockID + ".buffer";
-                        using (var oStr = File.Create(bufferFilePath))
+                        using (var oStr = System.IO.File.Create(bufferFilePath))
                         {
                             for (int f = 0; f < block.fileCount; f++)
                             {
+                                if (endSession)
+                                    return;
+
                                 string fileURL = gphDomainURL + downloadUUIDs[index.Key] + "/" + osTypeString.ToLower() + "_" + medium + "_" + blockID + "." + f;
                                 string fileName = Path.GetFileName(fileURL);
 
@@ -216,7 +240,7 @@ namespace DIDT
                         Debug.Log("Extracting | " + bufferFilePath);
 
                         // Process buffer //
-                        using (Stream oStr = File.OpenRead(bufferFilePath))
+                        using (Stream oStr = System.IO.File.OpenRead(bufferFilePath))
                         {
                             using (BinaryReader br = new BinaryReader(oStr))
                             {
@@ -231,13 +255,13 @@ namespace DIDT
                                     byte[] data = br.ReadBytes(fileSize);
                                     string dir = dataDir + Path.GetDirectoryName(UUID);
                                     if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
-                                    File.WriteAllBytes(dataDir + UUID, data);
+                                    System.IO.File.WriteAllBytes(dataDir + UUID, data);
                                     Console.WriteLine(UUID);
                                 }
                             }
                         }
 
-                        if (File.Exists(bufferFilePath)) File.Delete(bufferFilePath);
+                        if (System.IO.File.Exists(bufferFilePath)) System.IO.File.Delete(bufferFilePath);
                     }
                 }
                 Debug.Log("Complete");
