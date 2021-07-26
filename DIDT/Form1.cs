@@ -113,8 +113,14 @@ namespace DIDT
 
             if (DataTool.gameVersionLinkStrings.TryGetValue(gameVersion, out string gameVersionStr))
             {
-                string urlStr = DataTool.updateDomainURL + @"pl/patchlist_" + osTypeStr.ToLower() + "_" + gameVersionStr;
-                textBox_PatchListPath.Text = urlStr;
+                if (gameVersionStr.Contains("CN"))
+                {
+                    textBox_PatchListPath.Text = DataTool.updateDomainURLCN + @"pl/patchlist_" + osTypeStr.ToLower() + "_" + gameVersionStr;
+                }
+                else
+                {
+                    textBox_PatchListPath.Text = DataTool.updateDomainURL + @"pl/patchlist_" + osTypeStr.ToLower() + "_" + gameVersionStr;
+                }
             }
         }
 

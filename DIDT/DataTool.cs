@@ -15,7 +15,9 @@ namespace DIDT
     public static class DataTool
     {
         public static string updateDomainURL = @"https://g67ena.update.easebar.com/";
+        public static string updateDomainURLCN = @"https://g67.update.netease.com/";
         public static string gphDomainURL = @"https://g67ena.gph.easebar.com/";
+        public static string gphDomainURLCN = @"https://g67.gph.netease.com/";
         static string medium = "medium";
         static string cacheDir = AppContext.BaseDirectory + @"\Cache\";
 
@@ -37,12 +39,13 @@ namespace DIDT
 
         public enum OSType { IOS = 0, Android = 1 };
 
-        public enum GameVersion { PublicAlpha1, PublicAlpha2 };
+        public enum GameVersion { PublicAlpha1, PublicAlpha2, PublicAlpha2CN };
 
         public static Dictionary<GameVersion, string> gameVersionLinkStrings = new Dictionary<GameVersion, string>()
         { 
             { GameVersion.PublicAlpha1, "PubAlpha1ROW" },
             { GameVersion.PublicAlpha2, "PubAlpha2ROW" },
+            { GameVersion.PublicAlpha2CN, "PubAlpha2CNCN" },
         };
 
         /// <summary>
@@ -77,6 +80,7 @@ namespace DIDT
             patchListFileName = Path.GetFileNameWithoutExtension(patchListUrl);
             indices = new Dictionary<string, Index>();
             downloadUUIDs = new Dictionary<string, string>();
+            string gphUrl = gameVersionString.Contains("CN") ? gphDomainURLCN : gphDomainURL;
 
             workerThread = new Thread(() =>
             {
@@ -118,7 +122,7 @@ namespace DIDT
                                 downloadUUIDs.Add(type, uuid);
                                 Debug.Log("Found UUID : " + type + " " + uuid);
 
-                                indexURL = @"https://g67ena.gph.easebar.com/" + uuid + "/" + osTypeString.ToLower() + "_" + medium + "_" + "index";
+                                indexURL = gphUrl + uuid + "/" + osTypeString.ToLower() + "_" + medium + "_" + "index";
                                 DownloadIndex(type);
                             }
                         }
@@ -204,6 +208,7 @@ namespace DIDT
             using (WebClient client = new WebClient())
             {
                 float fileCounter = 0;
+                string gphUrl = gameVersionString.Contains("CN") ? gphDomainURLCN : gphDomainURL;
                 foreach (KeyValuePair<string, Index> index in indices)
                 {
 
@@ -221,7 +226,7 @@ namespace DIDT
                                 if (endSession)
                                     return;
 
-                                string fileURL = gphDomainURL + downloadUUIDs[index.Key] + "/" + osTypeString.ToLower() + "_" + medium + "_" + blockID + "." + f;
+                                string fileURL = gphUrl + downloadUUIDs[index.Key] + "/" + osTypeString.ToLower() + "_" + medium + "_" + blockID + "." + f;
                                 string fileName = Path.GetFileName(fileURL);
 
                                 Debug.Log("Downloading | " + fileURL);
