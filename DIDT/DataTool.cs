@@ -24,13 +24,13 @@ namespace DIDT
         public static string osTypeString;
         public static string gameVersionString;
 
-        public static string patchListUrl;
-        public static string patchListFileName;
+        //public static string patchListUrl;
+        //public static string patchListFileName;
         public static PatchList patchList;
 
-        public static string indexURL;
-        public static string indexFileName;
-        public static string indexFilePath;
+        //public static string indexURL;
+        //public static string indexFileName;
+        //public static string indexFilePath;
         public static Dictionary<string, string> downloadUUIDs;
         public static Dictionary<string, Index> indices;
         public static bool running;
@@ -75,10 +75,10 @@ namespace DIDT
 
         static void DownloadPatchList()
         {
-            patchListUrl = Program.window.GetPatchListPath();
+            string patchListUrl = Program.window.GetPatchListPath();
             osTypeString = Program.window.GetOSTypeString();
             gameVersionString = Program.window.GetGameVersionString();
-            patchListFileName = Path.GetFileNameWithoutExtension(patchListUrl);
+            string patchListFileName = Path.GetFileNameWithoutExtension(patchListUrl);
             indices = new Dictionary<string, Index>();
             downloadUUIDs = new Dictionary<string, string>();
             string gphUrl = gameVersionString.Contains("CN") ? gphDomainURLCN : gphDomainURL;
@@ -123,8 +123,8 @@ namespace DIDT
                                 downloadUUIDs.Add(type, uuid);
                                 Debug.Log("Found UUID : " + type + " " + uuid);
 
-                                indexURL = gphUrl + uuid + "/" + osTypeString.ToLower() + "_" + medium + "_" + "index";
-                                DownloadIndex(type);
+                                string indexURL = gphUrl + uuid + "/" + osTypeString.ToLower() + "_" + medium + "_" + "index";
+                                DownloadIndex(indexURL, type);
                             }
                         }
                     }
@@ -149,18 +149,18 @@ namespace DIDT
             workerThread.Start();
         }
 
-        static void DownloadIndex(string uuidType)
+        static void DownloadIndex(string indexURL, string uuidType)
         {
             Debug.Log("Downloading Index : " + uuidType + " " + indexURL);
-            indexFileName = Path.GetFileNameWithoutExtension(indexURL);
-            indexFilePath = cacheDir + indexFileName + "_" + uuidType;
+            string indexFileName = Path.GetFileNameWithoutExtension(indexURL);
+            string indexFilePath = cacheDir + indexFileName + "_" + uuidType;
             try
             {
                 using (WebClient wc = new WebClient())
                 {
                     wc.DownloadFile(
                         // Param1 = Link of file
-                        new System.Uri(indexURL),
+                        new Uri(indexURL),
                         // Param2 = Path to save
                         indexFilePath
                     );
@@ -188,6 +188,8 @@ namespace DIDT
             }
         }
 
+        static object downloadCounterLockObj = new object();
+
         static void DownloadRepository()
         {
             // Create Data Folder //
@@ -206,73 +208,82 @@ namespace DIDT
                 }
             }
 
-            using (WebClient client = new WebClient())
+            float fileCounter = 0;
+            string gphUrl = gameVersionString.Contains("CN") ? gphDomainURLCN : gphDomainURL;
+            foreach (KeyValuePair<string, Index> index in indices)
             {
-                float fileCounter = 0;
-                string gphUrl = gameVersionString.Contains("CN") ? gphDomainURLCN : gphDomainURL;
-                foreach (KeyValuePair<string, Index> index in indices)
+                for (int b = 0; b < index.Value.blockCount; b++)
                 {
+                    Index.Block block = index.Value.blocks[b];
+                    int blockID = block.ID;
 
-                    for (int b = 0; b < index.Value.blockCount; b++)
+                    // Download each file //
+                    List<(int Index, byte[] Data)> blocksData = new List<(int, byte[])>();
+
+                    Parallel.For(0, block.fileCount, (f) =>
                     {
-                        Index.Block block = index.Value.blocks[b];
-                        int blockID = block.ID;
+                        if (endSession)
+                            return;
 
-                        // Download each file and merge into a buffer file //
-                        string bufferFilePath = cacheDir + @"Block" + blockID + ".buffer";
-                        using (var oStr = System.IO.File.Create(bufferFilePath))
+                        string fileURL = gphUrl + downloadUUIDs[index.Key] + "/" + osTypeString.ToLower() + "_" + medium + "_" + blockID + "." + f;
+                        string fileName = Path.GetFileName(fileURL);
+
+                        Debug.Log("Downloading | " + fileURL);
+
+                        using (WebClient client = new WebClient())
                         {
-                            for (int f = 0; f < block.fileCount; f++)
+                            var data = client.DownloadData(fileURL);
+                            blocksData.Add((f, data));
+
+                            lock (downloadCounterLockObj)
                             {
-                                if (endSession)
-                                    return;
-
-                                string fileURL = gphUrl + downloadUUIDs[index.Key] + "/" + osTypeString.ToLower() + "_" + medium + "_" + blockID + "." + f;
-                                string fileName = Path.GetFileName(fileURL);
-
-                                Debug.Log("Downloading | " + fileURL);
-                                byte[] data = client.DownloadData(new Uri(fileURL));
-
-                                Program.window.SetProgressBarPercent((int)((fileCounter / totalFiles) * 100));
+                                Program.window.SetProgressBarPercent((int)(fileCounter / totalFiles * 100));
                                 fileCounter++;
-
-                                using (MemoryStream inputStream = new MemoryStream(data))
-                                {
-                                    inputStream.CopyTo(oStr);
-                                }
                             }
                         }
+                    });
 
-                        Debug.Log("Extracting | " + bufferFilePath);
+                    using (var oStr = new MemoryStream())
+                    {
+                        var blocksSorted = blocksData.OrderBy(b => b.Index);
+
+                        // Merge into single file
+                        foreach (var blockData in blocksSorted)
+                        {
+                            oStr.Write(blockData.Data);
+                        }
+
+                        blocksSorted = null;
+                        blocksData.Clear();
+                        blocksData = null;
+                        GC.Collect();
+
+                        Debug.Log($"Extracting | {downloadUUIDs[index.Key]} Block {blockID}");
 
                         // Process buffer //
-                        using (Stream oStr = System.IO.File.OpenRead(bufferFilePath))
+                        oStr.Position = 0;
+                        using (BinaryReader br = new BinaryReader(oStr))
                         {
-                            using (BinaryReader br = new BinaryReader(oStr))
+                            while (oStr.Position < oStr.Length)
                             {
-                                while (oStr.Position < oStr.Length)
-                                {
-                                    int strSize = br.ReadInt32();
-                                    string UUID = new string(br.ReadChars(strSize));
-                                    int fileSize = br.ReadInt32();
-                                    char[] hash = br.ReadChars(32);
+                                int strSize = br.ReadInt32();
+                                string UUID = new string(br.ReadChars(strSize));
+                                int fileSize = br.ReadInt32();
+                                char[] hash = br.ReadChars(32);
 
-                                    // Read whole file //
-                                    byte[] data = br.ReadBytes(fileSize);
-                                    string dir = dataDir + Path.GetDirectoryName(UUID);
-                                    if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
-                                    System.IO.File.WriteAllBytes(dataDir + UUID, data);
-                                    Console.WriteLine(UUID);
-                                }
+                                // Read whole file //
+                                byte[] data = br.ReadBytes(fileSize);
+                                string dir = dataDir + Path.GetDirectoryName(UUID);
+                                if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+                                System.IO.File.WriteAllBytes(dataDir + UUID, data);
+                                Console.WriteLine(UUID);
                             }
                         }
-
-                        if (System.IO.File.Exists(bufferFilePath)) System.IO.File.Delete(bufferFilePath);
                     }
                 }
-                Debug.Log("Complete");
-                Program.window.SetProgressBarPercent(0);
             }
+            Debug.Log("Complete");
+            Program.window.SetProgressBarPercent(0);
         }
     }
 }
