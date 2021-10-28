@@ -39,13 +39,14 @@ namespace DIDT
 
         public enum OSType { IOS = 0, Android = 1 };
 
-        public enum GameVersion { PublicAlpha1, PublicAlpha2, PublicAlpha2CN };
+        public enum GameVersion { PublicAlpha1, PublicAlpha2, PublicAlpha2CN, Beta };
 
         public static Dictionary<GameVersion, string> gameVersionLinkStrings = new Dictionary<GameVersion, string>()
         { 
             { GameVersion.PublicAlpha1, "PubAlpha1ROW" },
             { GameVersion.PublicAlpha2, "PubAlpha2ROW" },
             { GameVersion.PublicAlpha2CN, "PubAlpha2CNCN" },
+            { GameVersion.Beta, "BetaROW" },
         };
 
         /// <summary>
