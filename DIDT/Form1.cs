@@ -1,19 +1,9 @@
-﻿using Newtonsoft.Json;
-using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
-using System.Drawing;
-using System.IO;
-using System.Linq;
-using System.Net;
-using System.Text;
-using System.Threading.Tasks;
-using System.Windows.Forms;
-using DarkUI;
+﻿using DarkUI.Controls;
 using DarkUI.Forms;
-using DarkUI.Controls;
+using System;
+using System.Drawing;
 using System.Runtime.InteropServices;
+using System.Windows.Forms;
 
 namespace DIDT
 {
@@ -34,18 +24,13 @@ namespace DIDT
         public MainWindow()
         {
             InitializeComponent();
-            DataTool.Initialize(this);
+            Initialize();
+            Debug.Initialize(new Progress<string>(AppendLogText));
+            DataTool.Initialize(new Progress<int>(SetProgressBarPercent));
         }
 
-        public void AppendLogText(string text)
+        private void AppendLogText(string text)
         {
-            if (InvokeRequired)
-            {
-                this.Invoke(new Action<string>(AppendLogText), new object[] { text });
-                return;
-            }
-
-            string[] row = { text };
             var listViewItem = new DarkListItem(text);
             this.logList.Items.Add(listViewItem);
             this.logList.SelectItem(this.logList.Items.Count - 1);
@@ -90,14 +75,8 @@ namespace DIDT
             return "UnknownVersion";
         }
 
-        public void SetProgressBarPercent(int percent)
+        private void SetProgressBarPercent(int percent)
         {
-            if (InvokeRequired)
-            {
-                this.Invoke(new Action<int>(SetProgressBarPercent), new object[] { percent });
-                return;
-            }
-
             progressBar1.Value = percent;
         }
 
@@ -130,7 +109,7 @@ namespace DIDT
             {
                 if (!(Control is Button)) //Change here depending on the Library you use for your contols
                 {
-                    Control.MouseDown += new System.Windows.Forms.MouseEventHandler(this.TitlebarDrag);
+                    Control.MouseDown += new MouseEventHandler(this.TitlebarDrag);
                 }
             }
         }
@@ -247,16 +226,6 @@ namespace DIDT
             }
         }
 
-        private void panel2_Paint(object sender, PaintEventArgs e)
-        {
-
-        }
-
-        private void textBox_PatchListPath_TextChanged(object sender, EventArgs e)
-        {
-
-        }
-
         private void button_GetPatchList_Click(object sender, EventArgs e)
         {
             if (DataTool.running)
@@ -319,14 +288,13 @@ namespace DIDT
             ChangeTab(1);
         }
 
-
         void CreateResourceRepo()
         {
             string osTypeString = Program.window.GetOSTypeString();
             string gameVersionString = Program.window.GetGameVersionString();
             string dataPath = AppContext.BaseDirectory + @"\Data_" + gameVersionString + "_" + osTypeString + @"\";
             string resourceRepoPath = dataPath + "\\" + RESOURCE_REPOSITORY_NAME;
-            repo = new ResourceRepository(resourceRepoPath);
+            repo = new ResourceRepository(resourceRepoPath, new Progress<int>(SetProgressBarPercent));
         }
 
         private void buttonSortFiles_Click(object sender, EventArgs e)

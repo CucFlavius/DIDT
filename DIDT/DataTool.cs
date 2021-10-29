@@ -1,14 +1,12 @@
 ﻿using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Net;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Windows.Forms;
 
 namespace DIDT
 {
@@ -26,7 +24,7 @@ namespace DIDT
 
         //public static string patchListUrl;
         //public static string patchListFileName;
-        public static PatchList patchList;
+        //public static PatchList patchList;
 
         //public static string indexURL;
         //public static string indexFileName;
@@ -49,12 +47,14 @@ namespace DIDT
             { GameVersion.Beta, "BetaROW" },
         };
 
+        private static IProgress<int> _progress;
+
         /// <summary>
         /// Run on startup
         /// </summary>
-        public static void Initialize(MainWindow window)
+        public static void Initialize(IProgress<int> progress)
         {
-            window.Initialize();
+            _progress = progress;
         }
 
         /// <summary>
@@ -94,14 +94,14 @@ namespace DIDT
                     {
                         wc.DownloadFile(
                             // Param1 = Link of file
-                            new System.Uri(patchListUrl),
+                            new Uri(patchListUrl),
                             // Param2 = Path to save
                             cacheDir + patchListFileName
                         );
 
                         wc.DownloadProgressChanged += (s, e) =>
                         {
-                            Program.window.SetProgressBarPercent(e.ProgressPercentage);
+                            _progress.Report(e.ProgressPercentage);
                         };
                     }
 
@@ -110,7 +110,7 @@ namespace DIDT
                         using (StreamReader reader = new StreamReader(str))
                         {
                             string jsonData = reader.ReadToEnd();
-                            patchList = JsonConvert.DeserializeObject<PatchList>(jsonData);
+                            var patchList = JsonConvert.DeserializeObject<PatchList>(jsonData);
 
                             foreach (KeyValuePair<string, string> item in patchList.patch_timestamp)
                             {
@@ -167,7 +167,7 @@ namespace DIDT
 
                     wc.DownloadProgressChanged += (s, e) =>
                     {
-                        Program.window.SetProgressBarPercent(e.ProgressPercentage);
+                        _progress.Report(e.ProgressPercentage);
                     };
                 }
 
@@ -175,7 +175,7 @@ namespace DIDT
                 {
                     if (str.Length > 0)
                     {
-                        using (BinaryReader br = new BinaryReader(str))
+                        using (BinaryReader br = new BinaryReader(str, Encoding.ASCII))
                         {
                             indices.Add(uuidType, new Index(br));
                         }
@@ -220,7 +220,7 @@ namespace DIDT
                     // Download each file //
                     List<(int Index, byte[] Data)> blocksData = new List<(int, byte[])>();
 
-                    Parallel.For(0, block.fileCount, (f) =>
+                    Parallel.For(0, block.fileCount, new ParallelOptions { MaxDegreeOfParallelism = 6 }, (f) =>
                     {
                         if (endSession)
                             return;
@@ -235,15 +235,16 @@ namespace DIDT
                             var data = client.DownloadData(fileURL);
                             blocksData.Add((f, data));
 
+                            _progress.Report((int)(fileCounter / totalFiles * 100));
                             lock (downloadCounterLockObj)
                             {
-                                Program.window.SetProgressBarPercent((int)(fileCounter / totalFiles * 100));
                                 fileCounter++;
                             }
                         }
                     });
 
-                    using (var oStr = new MemoryStream())
+                    string bufferFilePath = cacheDir + $"{downloadUUIDs[index.Key]}_{blockID}.temp";
+                    using (var oStr = System.IO.File.Create(bufferFilePath))
                     {
                         var blocksSorted = blocksData.OrderBy(b => b.Index);
 
@@ -262,7 +263,7 @@ namespace DIDT
 
                         // Process buffer //
                         oStr.Position = 0;
-                        using (BinaryReader br = new BinaryReader(oStr))
+                        using (BinaryReader br = new BinaryReader(oStr, Encoding.ASCII))
                         {
                             while (oStr.Position < oStr.Length)
                             {
@@ -280,10 +281,12 @@ namespace DIDT
                             }
                         }
                     }
+
+                    if (System.IO.File.Exists(bufferFilePath)) System.IO.File.Delete(bufferFilePath);
                 }
             }
             Debug.Log("Complete");
-            Program.window.SetProgressBarPercent(0);
+            _progress.Report(0);
         }
     }
 }

@@ -1,10 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using System.IO.Compression;
+using System.Linq;
 using System.Text;
 using System.Threading;
-using System.Linq;
 
 namespace DIDT
 {
@@ -20,10 +19,12 @@ namespace DIDT
         public bool running;
         bool endSession = false;
         Thread workerThread;
+        IProgress<int> progress;
 
-        public ResourceRepository(string repoPath)
+        public ResourceRepository(string repoPath, IProgress<int> progress)
         {
             this.localDataPath = Path.GetDirectoryName(repoPath);
+            this.progress = progress;
 
             byte[] decompressedData;
 
@@ -36,7 +37,7 @@ namespace DIDT
             // Read Repo //
             using (Stream str = System.IO.File.OpenRead(repoPath))
             {
-                using (BinaryReader br = new BinaryReader(str))
+                using (BinaryReader br = new BinaryReader(str, Encoding.ASCII))
                 {
                     string CCCC = new string(br.ReadChars(4));
                     string ZZZ4 = new string(br.ReadChars(4));
@@ -58,7 +59,7 @@ namespace DIDT
             int fileIndex = 0;
             using (MemoryStream ms = new MemoryStream(decompressedData))
             {
-                using (BinaryReader br = new BinaryReader(ms))
+                using (BinaryReader br = new BinaryReader(ms, Encoding.ASCII))
                 {
                     uint version = br.ReadUInt32();     // probably version, always 1
                     br.ReadUInt16();                    // unknown
@@ -156,7 +157,7 @@ namespace DIDT
                             Debug.Log("Data file doesn't exist : " + fileDataPath);
                     }
 
-                    Program.window.SetProgressBarPercent((int)((float)((float)i / (float)total) * 100f));
+                    this.progress.Report((int)(i / (float)total * 100));
                 }
 
                 // Clear empty folders
@@ -190,7 +191,7 @@ namespace DIDT
 
                     using (Stream str = System.IO.File.OpenRead(file))
                     {
-                        using (BinaryReader br = new BinaryReader(str))
+                        using (BinaryReader br = new BinaryReader(str, Encoding.ASCII))
                         {
                             decompressedData = null;
 
@@ -214,7 +215,7 @@ namespace DIDT
                         Debug.Log("Decompressed : " + file);
                     }
 
-                    Program.window.SetProgressBarPercent((int)((float)((float)index / (float)total) * 100f));
+                    this.progress.Report((int)(index / (float)total * 100));
                 }
             });
 
